@@ -8,7 +8,6 @@ import requests
 BOT_TOKEN = '8871290779:AAEBWy17HHbYpMuc9D-ZKI7h8x2R5Ky5Cws'
 CHANNEL_ID = '@Minings2026'
 
-# Initialize Bot and App
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
@@ -33,52 +32,44 @@ def webhook():
         return 'OK', 200
     return 'Forbidden', 403
 
-@app.route('/')
-def home():
-    return "KingSpin Bot is running!", 200
-
 # --- Helper Functions ---
 def check_user_joined(user_id):
     try:
-        # Note: Bot must be an administrator in the CHANNEL to check membership
         member = bot.get_chat_member(CHANNEL_ID, user_id)
         return member.status in ['creator', 'administrator', 'member']
-    except Exception as e:
-        print(f"Error checking membership: {e}")
+    except:
         return False
 
-# --- Message Handler ---
-@bot.message_handler(func=lambda message: True)
-def handle_messages(message):
+# --- Unified Message & Dice Handler ---
+# content_types မှာ 'dice' ကို ထည့်လိုက်တဲ့အတွက် ဂိမ်းဆော့တာပါ ဖမ်းမိသွားပါမယ်
+@bot.message_handler(func=lambda message: True, content_types=['text', 'dice', 'sticker', 'photo', 'video'])
+def handle_all_messages(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     
     # 1. Force Join Protection (Only for Groups)
     if message.chat.type in ['group', 'supergroup']:
-        # Bypass for Channel accounts (Anonymous Admins)
-        if message.sender_chat and message.sender_chat.type == 'channel':
-            pass 
-        # Bypass for Group Admins
-        elif bot.get_chat_member(chat_id, user_id).status in ['creator', 'administrator']:
-            pass
-        else:
-            # Enforce Join Check
-            if not check_user_joined(user_id):
-                try:
-                    bot.delete_message(chat_id, message.message_id)
-                    markup = telebot.types.InlineKeyboardMarkup()
-                    markup.add(telebot.types.InlineKeyboardButton(text="📢 Join Channel Now", url="https://t.me/Minings2026"))
-                    bot.send_message(chat_id, f"⚠️ Access Denied! {message.from_user.first_name}, please join our channel first.", reply_markup=markup)
-                    return
-                except Exception as e:
-                    print(f"Error enforcing channel link: {e}")
-                    return
+        # Admin Bypass
+        is_admin = False
+        try:
+            status = bot.get_chat_member(chat_id, user_id).status
+            if status in ['creator', 'administrator']:
+                is_admin = True
+        except: pass
+        
+        if not is_admin and not check_user_joined(user_id):
+            try:
+                bot.delete_message(chat_id, message.message_id)
+                markup = telebot.types.InlineKeyboardMarkup()
+                markup.add(telebot.types.InlineKeyboardButton(text="📢 Join Channel Now", url="https://t.me/Minings2026"))
+                bot.send_message(chat_id, f"⚠️ Access Denied! {message.from_user.first_name}, join channel to play/chat.", reply_markup=markup)
+                return
+            except: return
 
-    # 2. Command Handling
+    # 2. Logic Execution (Only if Member)
     if message.text and message.text.startswith('/start'):
         bot.reply_to(message, "Welcome to KingSpin! Use /spin to play.")
-    
-    # Add your /spin, /balance, /withdraw logic here...
+    # Add your /spin, /balance logic here...
 
 if __name__ == "__main__":
     app.run()
