@@ -37,31 +37,48 @@ def webhook():
 def home():
     return "KingSpin Bot is running!", 200
 
-# --- Helper Functions (Keep your original logic) ---
+# --- Helper Functions ---
 def check_user_joined(user_id):
     try:
+        # Note: Bot must be an administrator in the CHANNEL to check membership
         member = bot.get_chat_member(CHANNEL_ID, user_id)
         return member.status in ['creator', 'administrator', 'member']
-    except:
+    except Exception as e:
+        print(f"Error checking membership: {e}")
         return False
 
 # --- Message Handler ---
 @bot.message_handler(func=lambda message: True)
 def handle_messages(message):
-    user_id = str(message.from_user.id)
+    user_id = message.from_user.id
+    chat_id = message.chat.id
     
-    # 1. Force Join Protection
-    if not check_user_joined(user_id):
-        markup = telebot.types.InlineKeyboardMarkup()
-        markup.add(telebot.types.InlineKeyboardButton(text="📢 Join Channel Now", url="https://t.me/Minings2026"))
-        bot.reply_to(message, "⚠️ Access Denied! Please join our channel first.", reply_markup=markup)
-        return
+    # 1. Force Join Protection (Only for Groups)
+    if message.chat.type in ['group', 'supergroup']:
+        # Bypass for Channel accounts (Anonymous Admins)
+        if message.sender_chat and message.sender_chat.type == 'channel':
+            pass 
+        # Bypass for Group Admins
+        elif bot.get_chat_member(chat_id, user_id).status in ['creator', 'administrator']:
+            pass
+        else:
+            # Enforce Join Check
+            if not check_user_joined(user_id):
+                try:
+                    bot.delete_message(chat_id, message.message_id)
+                    markup = telebot.types.InlineKeyboardMarkup()
+                    markup.add(telebot.types.InlineKeyboardButton(text="📢 Join Channel Now", url="https://t.me/Minings2026"))
+                    bot.send_message(chat_id, f"⚠️ Access Denied! {message.from_user.first_name}, please join our channel first.", reply_markup=markup)
+                    return
+                except Exception as e:
+                    print(f"Error enforcing channel link: {e}")
+                    return
 
-    # 2. Add your game logic and commands here...
-    if message.text.startswith('/start'):
+    # 2. Command Handling
+    if message.text and message.text.startswith('/start'):
         bot.reply_to(message, "Welcome to KingSpin! Use /spin to play.")
     
-    # Continue with your original /spin, /balance, /withdraw logic...
+    # Add your /spin, /balance, /withdraw logic here...
 
 if __name__ == "__main__":
     app.run()
