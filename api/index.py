@@ -1,26 +1,13 @@
 import os
-import random
 import telebot
 from flask import Flask, request
-import requests
 
-# Bot Configuration
-BOT_TOKEN = '8871290779:AAEBWy17HHbYpMuc9D-ZKI7h8x2R5Ky5Cws'
+# Bot Configuration (Using environment variables is recommended for security)
+BOT_TOKEN = os.environ.get('BOT_TOKEN', '8871290779:AAEBWy17HHbYpMuc9D-ZKI7h8x2R5Ky5Cws')
 CHANNEL_ID = '@Minings2026'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
-
-# Supabase Configuration
-SUPABASE_URL = "https://bysgzzqyubtgvdghldec.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ5c2d6enF5dWJ0Z3ZkZ2hsZGVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MzM4ODQsImV4cCI6MjA5MzUwOTg4NH0.-4JDl5X--fNYrRyuaOzyUXz0FaJpIxNSLLzcjGrlavQ"
-
-headers = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json",
-    "Prefer": "return=representation"
-}
 
 # --- Webhook Endpoint ---
 @app.route('/api', methods=['POST'])
@@ -40,14 +27,19 @@ def check_user_joined(user_id):
     except:
         return False
 
+def get_user_display(user):
+    """Returns a clickable mention if username exists, otherwise returns first name."""
+    if user.username:
+        return f"@{user.username}"
+    return f"[{user.first_name}](tg://user?id={user.id})"
+
 # --- Unified Message & Dice Handler ---
-# content_types မှာ 'dice' ကို ထည့်လိုက်တဲ့အတွက် ဂိမ်းဆော့တာပါ ဖမ်းမိသွားပါမယ်
-@bot.message_handler(func=lambda message: True, content_types=['text', 'dice', 'sticker', 'photo', 'video'])
+@bot.message_handler(func=lambda message: True, content_types=['text', 'dice', 'sticker', 'photo', 'video', 'document', 'animation'])
 def handle_all_messages(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     
-    # 1. Force Join Protection (Only for Groups)
+    # 1. Force Join Protection (Only for Groups/Supergroups)
     if message.chat.type in ['group', 'supergroup']:
         # Admin Bypass
         is_admin = False
@@ -55,21 +47,36 @@ def handle_all_messages(message):
             status = bot.get_chat_member(chat_id, user_id).status
             if status in ['creator', 'administrator']:
                 is_admin = True
-        except: pass
+        except: 
+            pass
         
         if not is_admin and not check_user_joined(user_id):
             try:
+                # Delete the unauthorized message
                 bot.delete_message(chat_id, message.message_id)
+                
+                # Create the Join button
                 markup = telebot.types.InlineKeyboardMarkup()
                 markup.add(telebot.types.InlineKeyboardButton(text="📢 Join Channel Now", url="https://t.me/Minings2026"))
-                bot.send_message(chat_id, f"⚠️ Access Denied! {message.from_user.first_name}, join channel to play/chat.", reply_markup=markup)
+                
+                # Format the message
+                user_display = get_user_display(message.from_user)
+                alert_text = (f"⚠️ **Access Restricted**\n\n"
+                              f"Hello {user_display},\n"
+                              f"You must join our official channel to interact with this group. "
+                              f"Please join to proceed.")
+                
+                bot.send_message(chat_id, alert_text, reply_markup=markup, parse_mode="Markdown")
                 return
-            except: return
+            except Exception as e:
+                print(f"Error handling force join: {e}")
+                return
 
-    # 2. Logic Execution (Only if Member)
+    # 2. Logic Execution (Only if Member or Admin)
     if message.text and message.text.startswith('/start'):
         bot.reply_to(message, "Welcome to KingSpin! Use /spin to play.")
-    # Add your /spin, /balance logic here...
+    
+    # Add your /spin, /balance logic below this line...
 
 if __name__ == "__main__":
     app.run()
